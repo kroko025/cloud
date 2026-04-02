@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kroko Sound — Advanced Music Player</title>
+  <link rel="stylesheet" href="music.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="blob-c"><div class="blob" id="bgBlob"></div></div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand" id="logoHome" style="cursor: pointer;">
+      <div class="logo-icon">K</div><span>KROKO</span>
+    </div>
+    <nav class="nav-menu">
+      <div class="nav-item active" data-target="discover">🏠 <span>Discover</span></div>
+      <div class="nav-item" data-target="playlists">📁 <span>My Playlists</span></div>
+      <div class="nav-item" data-target="library">❤️ <span>Favorites</span></div>
+      <div class="nav-item" data-target="stats">📊 <span>Stats</span></div>
+    </nav>
+  </aside>
+
+  <div class="main-container">
+    <header class="top-nav">
+      <div class="search-container">
+        <input type="text" id="searchInput" placeholder="Search tracks or artists...">
+      </div>
+      <div class="profile-area">
+        <div class="profile-chip" id="profileBtn">
+          <div class="avatar-circle" id="userAvatar">U</div>
+          <span class="user-name" id="displayUserName">User</span>
+        </div>
+        <div id="accountMenu" class="account-dropdown">
+          <div class="dropdown-item" id="settingsBtn">⚙️ Settings</div>
+          <div class="dropdown-item" id="exportPlaylistsBtn">💾 Export Playlists</div>
+          <div class="dropdown-item" id="importPlaylistsBtn">📂 Import Playlists</div>
+          <hr style="border:none; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
+          <div class="dropdown-item exit" id="resetBtn" style="color:#f43f5e;">🚪 Reset Account</div>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-viewport">
+        <div id="discoverSection" class="content-tab active">
+          <section class="premium-hero">
+            <div class="hero-content">
+              <div class="trending-tag">#1 TRENDING</div>
+              <h1 id="heroTitle">Select a track</h1>
+              <p id="heroArtist">Your premium wave</p>
+              <div class="hero-actions">
+                <button class="play-main-btn" id="heroPlayBtn">Play Now</button>
+                <button class="heart-btn" id="mainLikeBtn">♡</button>
+              </div>
+            </div>
+            <div class="hero-artwork" id="heroArtBox"></div>
+          </section>
+          <h2 class="section-title">Recommended for you</h2>
+          <div id="songGrid" class="grid-container"></div>
+        </div>
+
+        <div id="playlistsSection" class="content-tab">
+          <div class="playlists-header">
+            <h1 class="section-title">My Playlists</h1>
+            <button class="create-playlist-btn" id="createPlaylistBtn">+ Create New Playlist</button>
+          </div>
+          <div id="playlistsContainer" class="playlists-container"></div>
+        </div>
+        
+        <div id="librarySection" class="content-tab">
+          <h1 class="section-title">Your Favorites</h1>
+          <div id="libraryGrid" class="grid-container"></div>
+        </div>
+
+        <div id="statsSection" class="content-tab">
+          <h1 class="section-title">Listening Statistics</h1>
+          <div id="statsContainer" class="stats-container"></div>
+        </div>
+    </main>
+  </div>
+
+  <footer class="modern-player">
+    <div class="player-inner">
+        <div class="p-left">
+          <div class="mini-art" id="miniArtBox"></div>
+          <div class="track-meta">
+            <div id="miniTitle" class="truncate">Select track</div>
+            <div id="miniArtist" class="artist-sub">Kroko Sound</div>
+            <div id="playlistIndicator" class="playlist-indicator"></div>
+          </div>
+        </div>
+        <div class="p-center">
+          <div class="p-controls">
+            <button id="prev" class="p-btn-sec">⏮</button>
+            <button id="play" class="p-btn-main">▶</button>
+            <button id="next" class="p-btn-sec">⏭</button>
+            <button id="shuffleBtn" class="p-btn-sec" style="font-size: 14px;">🔀</button>
+          </div>
+          <div class="p-timeline">
+            <span class="t-label" id="currentTime">0:00</span>
+            <div class="range-wrapper">
+                <input type="range" id="progress" value="0" min="0" max="100">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <span class="t-label" id="duration">0:00</span>
+          </div>
+          <div class="player-extras">
+            <label>Speed:</label>
+            <select id="playbackRate">
+              <option value="0.5">0.5x</option>
+              <option value="0.75">0.75x</option>
+              <option value="1" selected>1x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2x</option>
+            </select>
+            <div id="loadingIndicator" class="loading-indicator" style="display:none;">Loading...</div>
+          </div>
+        </div>
+        <div class="p-right">
+            <div class="vol-control">
+                <span>🔊</span>
+                <div class="range-wrapper vol-wrap">
+                  <input type="range" id="volume" min="0" max="1" step="0.01" value="0.5">
+                  <div class="progress-fill" id="volumeFill" style="width: 50%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+  </footer>
+</div>
+
+<!-- Modal для створення плейлиста (з можливістю завантажити обкладинку) -->
+<div id="createPlaylistModal" class="modal-overlay">
+  <div class="modal-card">
+    <h2>Create New Playlist</h2>
+    <div class="setting-group">
+      <label>Playlist Name</label>
+      <input type="text" id="playlistNameInput" placeholder="Enter playlist name...">
+    </div>
+    <div class="setting-group">
+      <label>Playlist Cover (optional)</label>
+      <input type="file" id="playlistCoverInput" accept="image/*">
+      <div id="coverPreview" class="cover-preview"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="save-btn" id="confirmCreatePlaylistBtn">Create</button>
+      <button class="cancel-btn" id="closePlaylistModalBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal для редагування плейлиста -->
+<div id="editPlaylistModal" class="modal-overlay">
+  <div class="modal-card modal-large">
+    <h2 id="editPlaylistTitle">Edit Playlist</h2>
+    <div class="setting-group">
+      <label>Playlist Name</label>
+      <input type="text" id="editPlaylistNameInput" placeholder="Playlist name...">
+    </div>
+    <div class="setting-group">
+      <label>Playlist Cover</label>
+      <input type="file" id="editPlaylistCoverInput" accept="image/*">
+      <div id="editCoverPreview" class="cover-preview"></div>
+      <button id="removeCoverBtn" class="small-btn">Remove Cover</button>
+    </div>
+    <div class="setting-group">
+      <label>Songs in this playlist</label>
+      <div id="playlistSongsList" class="playlist-songs-list"></div>
+    </div>
+    <div class="setting-group">
+      <label>Add songs to playlist</label>
+      <div id="availableSongsList" class="available-songs-list"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="save-btn" id="savePlaylistChangesBtn">Save Changes</button>
+      <button class="delete-playlist-btn" id="deletePlaylistBtn">Delete Playlist</button>
+      <button class="cancel-btn" id="closeEditModalBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal для перегляду та відтворення плейлиста -->
+<div id="playlistViewModal" class="modal-overlay">
+  <div class="modal-card modal-large">
+    <h2 id="viewPlaylistTitle">Playlist</h2>
+    <div class="playlist-cover-large" id="viewPlaylistCover"></div>
+    <div class="setting-group">
+      <label>Songs</label>
+      <div id="viewPlaylistSongs" class="playlist-songs-list"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="save-btn" id="playPlaylistBtn">▶ Play All</button>
+      <button class="save-btn" id="shufflePlaylistBtn">🔀 Shuffle</button>
+      <button class="cancel-btn" id="closeViewModalBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal для налаштувань -->
+<div id="settingsModal" class="modal-overlay">
+  <div class="modal-card">
+    <h2>App Settings</h2>
+    <div class="setting-group">
+      <label>Your Name</label>
+      <input type="text" id="nameInput">
+    </div>
+    <div class="setting-group">
+      <label>Choose Theme</label>
+      <div class="theme-presets">
+        <div class="theme-circle" data-color="#7c3aed" style="background: #7c3aed;"></div>
+        <div class="theme-circle" data-color="#06b6d4" style="background: #06b6d4;"></div>
+        <div class="theme-circle" data-color="#10b981" style="background: #10b981;"></div>
+        <div class="theme-circle" data-color="#f59e0b" style="background: #f59e0b;"></div>
+        <div class="theme-circle" data-color="#f472b6" style="background: #f472b6;"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="save-btn" id="saveSettingsBtn">Save</button>
+      <button class="cancel-btn" id="closeSettingsBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<audio id="audio"></audio>
+<script src="music.js"></script>
+</body>
+</html>
