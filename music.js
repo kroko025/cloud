@@ -1,10 +1,20 @@
+// ========== СИСТЕМА РЕЄСТРАЦІЇ ==========
+let currentUser = null;
+let users = JSON.parse(localStorage.getItem('kroko_users')) || [];
+
+// Перевіряємо, чи є авторизований користувач
+const savedUser = localStorage.getItem('kroko_current_user');
+if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+}
+
 // ========== ГЛОБАЛЬНІ ЗМІННІ ==========
 let songsList = [];
-let favorites = JSON.parse(localStorage.getItem('kroko_favs')) || [];
-let customPlaylists = JSON.parse(localStorage.getItem('kroko_playlists')) || [];
-let listenCounts = JSON.parse(localStorage.getItem('kroko_listens')) || {};
+let favorites = [];
+let customPlaylists = [];
+let listenCounts = {};
 
-// Початковий список музики (якщо немає в localStorage)
+// Початковий список музики (ВАЖЛИВО: переконайтеся, що файли music.mp3 існують!)
 const defaultSongs = [
     { id: 1, title: "прыгай,дура!", artist: "CUPSIZE", src: "music.mp3", cover: "https://images.genius.com/f75ad29ed7f6bf44dd554844d23954ad.1000x1000x1.png" },
     { id: 2, title: "я схожу с ума", artist: "CUPSIZE", src: "music2.mp3", cover: "https://i1.sndcdn.com/artworks-1FqzgRqmibvGLWB6-46ZxdQ-t500x500.jpg" },
@@ -12,40 +22,214 @@ const defaultSongs = [
     { id: 4, title: "Phonk Night", artist: "Kroko", src: "music.mp3", cover: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=400" }
 ];
 
-// Завантажуємо songsList з localStorage, якщо є, інакше defaultSongs
-if (localStorage.getItem('kroko_songs')) {
-    songsList = JSON.parse(localStorage.getItem('kroko_songs'));
-} else {
-    songsList = defaultSongs;
-    localStorage.setItem('kroko_songs', JSON.stringify(songsList));
-}
-
 let currentTrackIndex = 0;
 let isPlaying = false;
-let currentThemeColor = localStorage.getItem('user_theme') || "#7c3aed";
+let currentThemeColor = "#7c3aed";
 let currentEditingPlaylist = null;
 let currentViewingPlaylist = null;
 let activePlaylist = null;
 let shuffleMode = false;
 let shuffledIndices = [];
 let currentShuffleIndex = 0;
-let currentPlaybackRate = parseFloat(localStorage.getItem('kroko_playback_rate')) || 1;
+let currentPlaybackRate = 1;
 
 const audio = document.getElementById("audio");
 
-// ========== ОСНОВНІ ФУНКЦІЇ ==========
+// ========== ФУНКЦІЇ РЕЄСТРАЦІЇ ==========
+
+function initAuth() {
+    if (currentUser) {
+        loadUserData();
+        document.getElementById("authModal").classList.remove("auth-modal-show");
+        document.getElementById("appShell").style.display = "grid";
+        initApp();
+        return;
+    }
+    
+    document.getElementById("authModal").classList.add("auth-modal-show");
+    document.getElementById("appShell").style.display = "none";
+    
+    // Перемикання між формами
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const target = tab.getAttribute('data-auth-tab');
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById('loginForm').classList.remove('active');
+            document.getElementById('registerForm').classList.remove('active');
+            document.getElementById(`${target}Form`).classList.add('active');
+        });
+    });
+    
+    // Перемикання за посиланнями
+    document.querySelectorAll('.auth-link').forEach(link => {
+        link.addEventListener('click', () => {
+            const target = link.getAttribute('data-switch-to');
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.auth-tab[data-auth-tab="${target}"]`).classList.add('active');
+            document.getElementById('loginForm').classList.remove('active');
+            document.getElementById('registerForm').classList.remove('active');
+            document.getElementById(`${target}Form`).classList.add('active');
+        });
+    });
+    
+    // Вибір кольору аватара
+    let selectedAvatarColor = "#7c3aed";
+    document.querySelectorAll('.avatar-color').forEach(color => {
+        color.addEventListener('click', () => {
+            document.querySelectorAll('.avatar-color').forEach(c => c.classList.remove('selected'));
+            color.classList.add('selected');
+            selectedAvatarColor = color.getAttribute('data-color');
+        });
+    });
+    
+    // Реєстрація
+    document.getElementById("registerBtn").onclick = () => {
+        const name = document.getElementById("regName").value.trim();
+        const username = document.getElementById("regUsername").value.trim();
+        const email = document.getElementById("regEmail").value.trim();
+        const password = document.getElementById("regPassword").value;
+        const confirmPassword = document.getElementById("regConfirmPassword").value;
+        
+        if (!name || !username || !email || !password) {
+            alert("Please fill all fields");
+            return;
+        }
+        
+        if (password !== confirmPassword) {
+            alert("Passwords do not match");
+            return;
+        }
+        
+        if (users.find(u => u.username === username)) {
+            alert("Username already exists");
+            return;
+        }
+        
+        if (users.find(u => u.email === email)) {
+            alert("Email already registered");
+            return;
+        }
+        
+        const newUser = {
+            id: Date.now(),
+            name: name,
+            username: username,
+            email: email,
+            password: password,
+            avatarColor: selectedAvatarColor,
+            createdAt: new Date().toISOString()
+        };
+        
+        users.push(newUser);
+        localStorage.setItem('kroko_users', JSON.stringify(users));
+        
+        currentUser = newUser;
+        localStorage.setItem('kroko_current_user', JSON.stringify(currentUser));
+        
+        initializeUserData();
+        
+        alert("Registration successful!");
+        document.getElementById("authModal").classList.remove("auth-modal-show");
+        document.getElementById("appShell").style.display = "grid";
+        loadUserData();
+        initApp();
+    };
+    
+    // Вхід
+    document.getElementById("loginBtn").onclick = () => {
+        const loginInput = document.getElementById("loginEmail").value.trim();
+        const password = document.getElementById("loginPassword").value;
+        
+        const user = users.find(u => (u.username === loginInput || u.email === loginInput) && u.password === password);
+        
+        if (user) {
+            currentUser = user;
+            localStorage.setItem('kroko_current_user', JSON.stringify(currentUser));
+            loadUserData();
+            document.getElementById("authModal").classList.remove("auth-modal-show");
+            document.getElementById("appShell").style.display = "grid";
+            initApp();
+        } else {
+            alert("Invalid username/email or password");
+        }
+    };
+}
+
+function initializeUserData() {
+    if (!currentUser) return;
+    
+    if (!localStorage.getItem(`kroko_songs_${currentUser.id}`)) {
+        localStorage.setItem(`kroko_songs_${currentUser.id}`, JSON.stringify(defaultSongs));
+        localStorage.setItem(`kroko_favs_${currentUser.id}`, JSON.stringify([]));
+        localStorage.setItem(`kroko_playlists_${currentUser.id}`, JSON.stringify([]));
+        localStorage.setItem(`kroko_listens_${currentUser.id}`, JSON.stringify({}));
+    }
+}
+
+function loadUserData() {
+    if (!currentUser) return;
+    
+    const savedSongs = localStorage.getItem(`kroko_songs_${currentUser.id}`);
+    songsList = savedSongs ? JSON.parse(savedSongs) : defaultSongs;
+    favorites = JSON.parse(localStorage.getItem(`kroko_favs_${currentUser.id}`)) || [];
+    customPlaylists = JSON.parse(localStorage.getItem(`kroko_playlists_${currentUser.id}`)) || [];
+    listenCounts = JSON.parse(localStorage.getItem(`kroko_listens_${currentUser.id}`)) || {};
+    currentThemeColor = localStorage.getItem(`user_theme_${currentUser.id}`) || currentUser.avatarColor || "#7c3aed";
+    currentPlaybackRate = parseFloat(localStorage.getItem(`kroko_playback_rate_${currentUser.id}`)) || 1;
+}
+
+function saveAllUserData() {
+    if (!currentUser) return;
+    
+    localStorage.setItem(`kroko_songs_${currentUser.id}`, JSON.stringify(songsList));
+    localStorage.setItem(`kroko_favs_${currentUser.id}`, JSON.stringify(favorites));
+    localStorage.setItem(`kroko_playlists_${currentUser.id}`, JSON.stringify(customPlaylists));
+    localStorage.setItem(`kroko_listens_${currentUser.id}`, JSON.stringify(listenCounts));
+    localStorage.setItem(`user_theme_${currentUser.id}`, currentThemeColor);
+    localStorage.setItem(`kroko_playback_rate_${currentUser.id}`, currentPlaybackRate);
+}
+
+function logout() {
+    localStorage.removeItem('kroko_current_user');
+    location.reload();
+}
+
+function deleteAccount() {
+    if (confirm("Are you sure you want to delete your account? ALL DATA will be lost!")) {
+        users = users.filter(u => u.id !== currentUser.id);
+        localStorage.setItem('kroko_users', JSON.stringify(users));
+        
+        localStorage.removeItem(`kroko_songs_${currentUser.id}`);
+        localStorage.removeItem(`kroko_favs_${currentUser.id}`);
+        localStorage.removeItem(`kroko_playlists_${currentUser.id}`);
+        localStorage.removeItem(`kroko_listens_${currentUser.id}`);
+        localStorage.removeItem(`user_theme_${currentUser.id}`);
+        localStorage.removeItem(`kroko_playback_rate_${currentUser.id}`);
+        localStorage.removeItem('kroko_current_user');
+        
+        location.reload();
+    }
+}
+
+// ========== ОСНОВНІ ФУНКЦІЇ ДОДАТКУ ==========
+
 function initApp() {
-    const userName = localStorage.getItem('user_name') || "User";
+    const userName = currentUser ? currentUser.name : "User";
     const displayName = document.getElementById("displayUserName");
     const userAvatar = document.getElementById("userAvatar");
     const nameInput = document.getElementById("nameInput");
     
     if (displayName) displayName.innerText = userName;
-    if (userAvatar) userAvatar.innerText = userName[0].toUpperCase();
+    if (userAvatar) {
+        userAvatar.innerText = userName[0].toUpperCase();
+        userAvatar.style.background = currentThemeColor;
+    }
     if (nameInput) nameInput.value = userName;
     
     applyTheme(currentThemeColor);
     renderSongs(songsList, "songGrid");
+    renderSongs(songsList, "playlistGrid");
     renderPlaylists();
     if (songsList.length) loadTrack(0);
     setupNavigation();
@@ -57,7 +241,6 @@ function initApp() {
     setupHotkeys();
     renderStats();
     
-    // Відновлюємо збережену швидкість відтворення
     const rateSelect = document.getElementById("playbackRate");
     if (rateSelect) {
         rateSelect.value = currentPlaybackRate.toString();
@@ -66,6 +249,12 @@ function initApp() {
     
     const mainLikeBtn = document.getElementById("mainLikeBtn");
     if (mainLikeBtn) mainLikeBtn.onclick = toggleFavorite;
+    
+    const logoutBtn = document.getElementById("logoutBtn");
+    if (logoutBtn) logoutBtn.onclick = logout;
+    
+    const deleteAccountBtn = document.getElementById("resetBtn");
+    if (deleteAccountBtn) deleteAccountBtn.onclick = deleteAccount;
 }
 
 function applyTheme(color) {
@@ -134,6 +323,7 @@ function loadTrack(index, fromPlaylist = false) {
         const playlistIndicator = document.getElementById("playlistIndicator");
         if (playlistIndicator) playlistIndicator.innerText = `🎵 ${activePlaylist.name}`;
     } else {
+        if (index < 0 || index >= songsList.length) return;
         song = songsList[index];
         currentTrackIndex = index;
         activePlaylist = null;
@@ -173,6 +363,12 @@ function loadTrack(index, fromPlaylist = false) {
         const loader = document.getElementById("loadingIndicator");
         if (loader) loader.style.display = "none";
         audio.playbackRate = currentPlaybackRate;
+    };
+    audio.onerror = () => {
+        console.error("Error loading audio:", song.src);
+        const loader = document.getElementById("loadingIndicator");
+        if (loader) loader.style.display = "none";
+        alert(`Cannot load audio file: ${song.title}\nMake sure the file ${song.src} exists in the same folder.`);
     };
 }
 
@@ -258,7 +454,7 @@ function renderStats() {
     }).join('');
 }
 
-// ========== ФУНКЦІЇ ДЛЯ РОБОТИ З ПЛЕЙЛИСТАМИ ==========
+// ========== ФУНКЦІЇ ДЛЯ ПЛЕЙЛИСТІВ (скорочені) ==========
 
 function viewPlaylist(playlistId) {
     const playlist = customPlaylists.find(p => p.id === playlistId);
@@ -292,14 +488,10 @@ function viewPlaylist(playlistId) {
         `).join('');
     }
     
-    const playPlaylistBtn = document.getElementById("playPlaylistBtn");
-    const shufflePlaylistBtn = document.getElementById("shufflePlaylistBtn");
+    document.getElementById("playPlaylistBtn").onclick = () => playPlaylist(playlist.id, false);
+    document.getElementById("shufflePlaylistBtn").onclick = () => playPlaylist(playlist.id, true);
     
-    if (playPlaylistBtn) playPlaylistBtn.onclick = () => playPlaylist(playlist.id, false);
-    if (shufflePlaylistBtn) shufflePlaylistBtn.onclick = () => playPlaylist(playlist.id, true);
-    
-    const modal = document.getElementById("playlistViewModal");
-    if (modal) modal.classList.add("show");
+    document.getElementById("playlistViewModal").classList.add("show");
 }
 
 function playSingleSongFromPlaylist(songId) {
@@ -352,25 +544,17 @@ function nextInPlaylist() {
             loadTrack(currentShuffleIndex, true);
             playTrack(currentShuffleIndex, true);
             return true;
-        } else {
-            activePlaylist = null;
-            shuffleMode = false;
-            const playlistIndicator = document.getElementById("playlistIndicator");
-            if (playlistIndicator) playlistIndicator.innerText = "";
-            return false;
         }
     } else {
         if (currentTrackIndex + 1 < activePlaylist.songs.length) {
             loadTrack(currentTrackIndex + 1, true);
             playTrack(currentTrackIndex + 1, true);
             return true;
-        } else {
-            activePlaylist = null;
-            const playlistIndicator = document.getElementById("playlistIndicator");
-            if (playlistIndicator) playlistIndicator.innerText = "";
-            return false;
         }
     }
+    activePlaylist = null;
+    document.getElementById("playlistIndicator").innerText = "";
+    return false;
 }
 
 function prevInPlaylist() {
@@ -383,53 +567,53 @@ function prevInPlaylist() {
             playTrack(currentShuffleIndex, true);
             return true;
         }
-        return false;
     } else {
         if (currentTrackIndex - 1 >= 0) {
             loadTrack(currentTrackIndex - 1, true);
             playTrack(currentTrackIndex - 1, true);
             return true;
         }
-        return false;
     }
+    return false;
 }
 
 function createPlaylist() {
-    const playlistNameInput = document.getElementById("playlistNameInput");
-    if (!playlistNameInput) return;
-    
-    const playlistName = playlistNameInput.value.trim();
+    const playlistName = document.getElementById("playlistNameInput").value.trim();
     if (!playlistName) {
         alert("Please enter a playlist name");
         return;
     }
     
-    let coverData = null;
     const fileInput = document.getElementById("playlistCoverInput");
     if (fileInput && fileInput.files.length > 0) {
         const reader = new FileReader();
         reader.onload = function(e) {
-            coverData = e.target.result;
-            finalizeCreate(coverData);
+            const newPlaylist = {
+                id: Date.now(),
+                name: playlistName,
+                songs: [],
+                cover: e.target.result
+            };
+            customPlaylists.push(newPlaylist);
+            saveAllUserData();
+            renderPlaylists();
+            closeCreatePlaylistModal();
+            document.getElementById("playlistNameInput").value = "";
+            fileInput.value = "";
         };
         reader.readAsDataURL(fileInput.files[0]);
     } else {
-        finalizeCreate(null);
-    }
-    
-    function finalizeCreate(cover) {
         const newPlaylist = {
             id: Date.now(),
             name: playlistName,
             songs: [],
-            cover: cover
+            cover: null
         };
         customPlaylists.push(newPlaylist);
-        savePlaylists();
+        saveAllUserData();
         renderPlaylists();
         closeCreatePlaylistModal();
-        playlistNameInput.value = "";
-        if (fileInput) fileInput.value = "";
+        document.getElementById("playlistNameInput").value = "";
     }
 }
 
@@ -437,26 +621,19 @@ function editPlaylist(playlistId) {
     currentEditingPlaylist = customPlaylists.find(p => p.id === playlistId);
     if (!currentEditingPlaylist) return;
     
-    const editTitle = document.getElementById("editPlaylistTitle");
-    const editNameInput = document.getElementById("editPlaylistNameInput");
-    
-    if (editTitle) editTitle.innerText = `Edit: ${currentEditingPlaylist.name}`;
-    if (editNameInput) editNameInput.value = currentEditingPlaylist.name;
+    document.getElementById("editPlaylistTitle").innerText = `Edit: ${currentEditingPlaylist.name}`;
+    document.getElementById("editPlaylistNameInput").value = currentEditingPlaylist.name;
     
     const preview = document.getElementById("editCoverPreview");
-    if (preview) {
-        if (currentEditingPlaylist.cover) {
-            preview.innerHTML = `<img src="${currentEditingPlaylist.cover}" alt="cover">`;
-        } else {
-            preview.innerHTML = '';
-        }
+    if (preview && currentEditingPlaylist.cover) {
+        preview.innerHTML = `<img src="${currentEditingPlaylist.cover}" alt="cover">`;
+    } else if (preview) {
+        preview.innerHTML = '';
     }
     
     renderPlaylistSongs();
     renderAvailableSongs();
-    
-    const modal = document.getElementById("editPlaylistModal");
-    if (modal) modal.classList.add("show");
+    document.getElementById("editPlaylistModal").classList.add("show");
 }
 
 function renderPlaylistSongs() {
@@ -506,7 +683,7 @@ function addSongToPlaylist(songId) {
     const song = songsList.find(s => s.id === songId);
     if (song && currentEditingPlaylist) {
         currentEditingPlaylist.songs.push(song);
-        savePlaylists();
+        saveAllUserData();
         renderPlaylistSongs();
         renderAvailableSongs();
     }
@@ -515,28 +692,16 @@ function addSongToPlaylist(songId) {
 function removeSongFromPlaylist(songId) {
     if (currentEditingPlaylist) {
         currentEditingPlaylist.songs = currentEditingPlaylist.songs.filter(s => s.id !== songId);
-        savePlaylists();
+        saveAllUserData();
         renderPlaylistSongs();
         renderAvailableSongs();
-        if (activePlaylist && activePlaylist.id === currentEditingPlaylist.id) {
-            if (activePlaylist.songs[currentTrackIndex]?.id === songId) {
-                audio.pause();
-                isPlaying = false;
-                const playBtn = document.getElementById("play");
-                if (playBtn) playBtn.innerText = "▶";
-                activePlaylist = null;
-                const playlistIndicator = document.getElementById("playlistIndicator");
-                if (playlistIndicator) playlistIndicator.innerText = "";
-            }
-        }
     }
 }
 
 function savePlaylistChanges() {
-    const editNameInput = document.getElementById("editPlaylistNameInput");
-    if (editNameInput && currentEditingPlaylist) {
-        const newName = editNameInput.value.trim();
-        if (newName) currentEditingPlaylist.name = newName;
+    const newName = document.getElementById("editPlaylistNameInput").value.trim();
+    if (newName && currentEditingPlaylist) {
+        currentEditingPlaylist.name = newName;
     }
     
     const fileInput = document.getElementById("editPlaylistCoverInput");
@@ -544,13 +709,13 @@ function savePlaylistChanges() {
         const reader = new FileReader();
         reader.onload = function(e) {
             currentEditingPlaylist.cover = e.target.result;
-            savePlaylists();
+            saveAllUserData();
             renderPlaylists();
             closeEditPlaylistModal();
         };
         reader.readAsDataURL(fileInput.files[0]);
     } else {
-        savePlaylists();
+        saveAllUserData();
         renderPlaylists();
         closeEditPlaylistModal();
     }
@@ -559,9 +724,8 @@ function savePlaylistChanges() {
 function removePlaylistCover() {
     if (currentEditingPlaylist) {
         currentEditingPlaylist.cover = null;
-        const preview = document.getElementById("editCoverPreview");
-        if (preview) preview.innerHTML = '';
-        savePlaylists();
+        document.getElementById("editCoverPreview").innerHTML = '';
+        saveAllUserData();
         renderPlaylists();
     }
 }
@@ -569,12 +733,11 @@ function removePlaylistCover() {
 function deletePlaylist(playlistId) {
     if (confirm("Are you sure you want to delete this playlist?")) {
         customPlaylists = customPlaylists.filter(p => p.id !== playlistId);
-        savePlaylists();
+        saveAllUserData();
         renderPlaylists();
         if (activePlaylist && activePlaylist.id === playlistId) {
             activePlaylist = null;
-            const playlistIndicator = document.getElementById("playlistIndicator");
-            if (playlistIndicator) playlistIndicator.innerText = "";
+            document.getElementById("playlistIndicator").innerText = "";
         }
         if (currentEditingPlaylist && currentEditingPlaylist.id === playlistId) {
             closeEditPlaylistModal();
@@ -585,19 +748,12 @@ function deletePlaylist(playlistId) {
     }
 }
 
-function savePlaylists() {
-    localStorage.setItem('kroko_playlists', JSON.stringify(customPlaylists));
-}
-
-// ========== ФУНКЦІЇ ДЛЯ РОБОТИ З ОБРАНИМИ ==========
+// ========== ФУНКЦІЇ ДЛЯ ОБРАНИХ ==========
 
 function toggleFavorite() {
-    let currentSong;
-    if (activePlaylist && activePlaylist.songs[currentTrackIndex]) {
-        currentSong = activePlaylist.songs[currentTrackIndex];
-    } else {
-        currentSong = songsList[currentTrackIndex];
-    }
+    let currentSong = activePlaylist && activePlaylist.songs[currentTrackIndex] 
+        ? activePlaylist.songs[currentTrackIndex] 
+        : songsList[currentTrackIndex];
     
     const index = favorites.findIndex(fav => fav.id === currentSong.id);
     if (index === -1) {
@@ -605,28 +761,21 @@ function toggleFavorite() {
     } else {
         favorites.splice(index, 1);
     }
-    saveFavorites();
+    saveAllUserData();
     updateLikeUI();
 }
 
 function removeFromFavorites(songId) {
     favorites = favorites.filter(fav => fav.id !== songId);
-    saveFavorites();
+    saveAllUserData();
     renderFavorites();
     updateLikeUI();
 }
 
-function saveFavorites() {
-    localStorage.setItem('kroko_favs', JSON.stringify(favorites));
-}
-
 function updateLikeUI() {
-    let currentSong;
-    if (activePlaylist && activePlaylist.songs[currentTrackIndex]) {
-        currentSong = activePlaylist.songs[currentTrackIndex];
-    } else {
-        currentSong = songsList[currentTrackIndex];
-    }
+    let currentSong = activePlaylist && activePlaylist.songs[currentTrackIndex] 
+        ? activePlaylist.songs[currentTrackIndex] 
+        : songsList[currentTrackIndex];
     const isFav = favorites.some(fav => fav.id === currentSong.id);
     const btn = document.getElementById("mainLikeBtn");
     if (btn) {
@@ -638,34 +787,24 @@ function updateLikeUI() {
 // ========== ПЛЕЄР ==========
 
 function playTrack(index, fromPlaylist = false) {
-    if (index !== undefined) {
-        if (fromPlaylist && activePlaylist) {
-            // loadTrack вже викликано раніше
-        } else if (!fromPlaylist) {
-            activePlaylist = null;
-            shuffleMode = false;
-            const playlistIndicator = document.getElementById("playlistIndicator");
-            if (playlistIndicator) playlistIndicator.innerText = "";
-            const shuffleBtn = document.getElementById("shuffleBtn");
-            if (shuffleBtn) shuffleBtn.classList.remove("shuffle-active");
-            loadTrack(index);
-        }
+    if (index !== undefined && !fromPlaylist) {
+        activePlaylist = null;
+        shuffleMode = false;
+        document.getElementById("playlistIndicator").innerText = "";
+        document.getElementById("shuffleBtn")?.classList.remove("shuffle-active");
+        loadTrack(index);
     }
-    audio.play();
-    isPlaying = true;
-    const playBtn = document.getElementById("play");
-    if (playBtn) playBtn.innerText = "⏸";
     
-    // Збільшуємо лічильник прослуховувань
-    let currentSong;
-    if (activePlaylist && activePlaylist.songs[currentTrackIndex]) {
-        currentSong = activePlaylist.songs[currentTrackIndex];
-    } else {
-        currentSong = songsList[currentTrackIndex];
-    }
+    audio.play().catch(e => console.log("Play error:", e));
+    isPlaying = true;
+    document.getElementById("play").innerText = "⏸";
+    
+    let currentSong = activePlaylist && activePlaylist.songs[currentTrackIndex] 
+        ? activePlaylist.songs[currentTrackIndex] 
+        : songsList[currentTrackIndex];
     if (currentSong) {
         listenCounts[currentSong.id] = (listenCounts[currentSong.id] || 0) + 1;
-        localStorage.setItem('kroko_listens', JSON.stringify(listenCounts));
+        saveAllUserData();
         renderStats();
     }
 }
@@ -708,9 +847,6 @@ function setupEventListeners() {
         nextBtn.onclick = () => {
             if (activePlaylist) {
                 if (!nextInPlaylist()) {
-                    activePlaylist = null;
-                    const playlistIndicator = document.getElementById("playlistIndicator");
-                    if (playlistIndicator) playlistIndicator.innerText = "";
                     let nextIndex = (currentTrackIndex + 1) % songsList.length;
                     playTrack(nextIndex);
                 }
@@ -725,9 +861,6 @@ function setupEventListeners() {
         prevBtn.onclick = () => {
             if (activePlaylist) {
                 if (!prevInPlaylist()) {
-                    activePlaylist = null;
-                    const playlistIndicator = document.getElementById("playlistIndicator");
-                    if (playlistIndicator) playlistIndicator.innerText = "";
                     let prevIndex = (currentTrackIndex - 1 + songsList.length) % songsList.length;
                     playTrack(prevIndex);
                 }
@@ -766,12 +899,10 @@ function setupEventListeners() {
         audio.ontimeupdate = () => {
             if (audio.duration) {
                 const percent = (audio.currentTime / audio.duration) * 100;
-                const fill = document.getElementById("progressFill");
-                if (fill) fill.style.width = percent + "%";
-                const currentTimeSpan = document.getElementById("currentTime");
-                if (currentTimeSpan) currentTimeSpan.innerText = formatTime(audio.currentTime);
-                const durationSpan = document.getElementById("duration");
-                if (durationSpan) durationSpan.innerText = formatTime(audio.duration);
+                document.getElementById("progressFill").style.width = percent + "%";
+                document.getElementById("currentTime").innerText = formatTime(audio.currentTime);
+                document.getElementById("duration").innerText = formatTime(audio.duration);
+                document.getElementById("progress").value = percent;
             }
         };
     }
@@ -788,8 +919,7 @@ function setupEventListeners() {
     if (volumeSlider) {
         volumeSlider.oninput = (e) => {
             audio.volume = e.target.value;
-            const fill = document.getElementById("volumeFill");
-            if (fill) fill.style.width = (e.target.value * 100) + "%";
+            document.getElementById("volumeFill").style.width = (e.target.value * 100) + "%";
         };
     }
     
@@ -797,7 +927,7 @@ function setupEventListeners() {
         playbackRateSelect.onchange = (e) => {
             currentPlaybackRate = parseFloat(e.target.value);
             audio.playbackRate = currentPlaybackRate;
-            localStorage.setItem('kroko_playback_rate', currentPlaybackRate);
+            saveAllUserData();
         };
     }
     
@@ -805,9 +935,6 @@ function setupEventListeners() {
         audio.onended = () => {
             if (activePlaylist) {
                 if (!nextInPlaylist()) {
-                    activePlaylist = null;
-                    const playlistIndicator = document.getElementById("playlistIndicator");
-                    if (playlistIndicator) playlistIndicator.innerText = "";
                     let nextIndex = (currentTrackIndex + 1) % songsList.length;
                     playTrack(nextIndex);
                 }
@@ -819,159 +946,106 @@ function setupEventListeners() {
     }
 }
 
-// ========== МОДАЛЬНІ ВІКНА ТА ІНШЕ ==========
+// ========== МОДАЛЬНІ ВІКНА ==========
 
 function setupModals() {
-    const createBtn = document.getElementById("createPlaylistBtn");
-    if (createBtn) {
-        createBtn.onclick = () => {
-            const modal = document.getElementById("createPlaylistModal");
-            if (modal) modal.classList.add("show");
-        };
-    }
+    document.getElementById("createPlaylistBtn").onclick = () => {
+        document.getElementById("createPlaylistModal").classList.add("show");
+    };
+    document.getElementById("confirmCreatePlaylistBtn").onclick = createPlaylist;
+    document.getElementById("closePlaylistModalBtn").onclick = closeCreatePlaylistModal;
     
-    const confirmCreate = document.getElementById("confirmCreatePlaylistBtn");
-    if (confirmCreate) confirmCreate.onclick = createPlaylist;
+    document.getElementById("savePlaylistChangesBtn").onclick = savePlaylistChanges;
+    document.getElementById("deletePlaylistBtn").onclick = () => {
+        if (currentEditingPlaylist) deletePlaylist(currentEditingPlaylist.id);
+    };
+    document.getElementById("closeEditModalBtn").onclick = closeEditPlaylistModal;
+    document.getElementById("removeCoverBtn").onclick = removePlaylistCover;
     
-    const closePlaylistModal = document.getElementById("closePlaylistModalBtn");
-    if (closePlaylistModal) closePlaylistModal.onclick = closeCreatePlaylistModal;
+    document.getElementById("closeViewModalBtn").onclick = closeViewPlaylistModal;
     
-    const saveChanges = document.getElementById("savePlaylistChangesBtn");
-    if (saveChanges) saveChanges.onclick = savePlaylistChanges;
+    document.getElementById("settingsBtn").onclick = () => {
+        document.getElementById("settingsModal").classList.add("show");
+    };
+    document.getElementById("saveSettingsBtn").onclick = () => {
+        const newName = document.getElementById("nameInput").value.trim();
+        if (newName && currentUser) {
+            currentUser.name = newName;
+            users = users.map(u => u.id === currentUser.id ? currentUser : u);
+            localStorage.setItem('kroko_users', JSON.stringify(users));
+            localStorage.setItem('kroko_current_user', JSON.stringify(currentUser));
+            document.getElementById("displayUserName").innerText = newName;
+            document.getElementById("userAvatar").innerText = newName[0].toUpperCase();
+        }
+        localStorage.setItem(`user_theme_${currentUser.id}`, currentThemeColor);
+        document.getElementById("settingsModal").classList.remove("show");
+    };
+    document.getElementById("closeSettingsBtn").onclick = () => {
+        document.getElementById("settingsModal").classList.remove("show");
+    };
     
-    const deletePlaylistBtn = document.getElementById("deletePlaylistBtn");
-    if (deletePlaylistBtn) {
-        deletePlaylistBtn.onclick = () => {
-            if (currentEditingPlaylist) {
-                deletePlaylist(currentEditingPlaylist.id);
-            }
-        };
-    }
-    
-    const closeEdit = document.getElementById("closeEditModalBtn");
-    if (closeEdit) closeEdit.onclick = closeEditPlaylistModal;
-    
-    const removeCover = document.getElementById("removeCoverBtn");
-    if (removeCover) removeCover.onclick = removePlaylistCover;
-    
-    const closeView = document.getElementById("closeViewModalBtn");
-    if (closeView) closeView.onclick = closeViewPlaylistModal;
-    
-    const settingsBtn = document.getElementById("settingsBtn");
-    if (settingsBtn) {
-        settingsBtn.onclick = () => {
-            const modal = document.getElementById("settingsModal");
-            if (modal) modal.classList.add("show");
-        };
-    }
-    
-    const saveSettings = document.getElementById("saveSettingsBtn");
-    if (saveSettings) {
-        saveSettings.onclick = () => {
-            const nameInput = document.getElementById("nameInput");
-            const newName = nameInput ? nameInput.value.trim() : "";
-            if (newName) {
-                localStorage.setItem('user_name', newName);
-            }
-            localStorage.setItem('user_theme', currentThemeColor);
-            location.reload();
-        };
-    }
-    
-    const closeSettings = document.getElementById("closeSettingsBtn");
-    if (closeSettings) {
-        closeSettings.onclick = () => {
-            const modal = document.getElementById("settingsModal");
-            if (modal) modal.classList.remove("show");
-        };
-    }
-    
-    const profileBtn = document.getElementById("profileBtn");
-    if (profileBtn) {
-        profileBtn.onclick = (e) => {
-            e.stopPropagation();
-            const menu = document.getElementById("accountMenu");
-            if (menu) menu.classList.toggle("show");
-        };
-    }
-    
+    document.getElementById("profileBtn").onclick = (e) => {
+        e.stopPropagation();
+        document.getElementById("accountMenu").classList.toggle("show");
+    };
     document.addEventListener("click", () => {
-        const menu = document.getElementById("accountMenu");
-        if (menu) menu.classList.remove("show");
+        document.getElementById("accountMenu").classList.remove("show");
     });
     
-    const resetBtn = document.getElementById("resetBtn");
-    if (resetBtn) {
-        resetBtn.onclick = () => {
-            localStorage.clear();
-            location.reload();
-        };
-    }
+    document.getElementById("logoHome").onclick = () => switchTab("discover");
     
-    const logoHome = document.getElementById("logoHome");
-    if (logoHome) logoHome.onclick = () => switchTab("discover");
+    document.getElementById("exportPlaylistsBtn").onclick = () => {
+        const dataStr = JSON.stringify(customPlaylists, null, 2);
+        const blob = new Blob([dataStr], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `playlists_${currentUser?.username || 'user'}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
     
-    const exportBtn = document.getElementById("exportPlaylistsBtn");
-    if (exportBtn) exportBtn.onclick = exportPlaylists;
-    
-    const importBtn = document.getElementById("importPlaylistsBtn");
-    if (importBtn) {
-        importBtn.onclick = () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'application/json';
-            input.onchange = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                        try {
-                            const imported = JSON.parse(ev.target.result);
-                            if (Array.isArray(imported)) {
-                                customPlaylists = imported;
-                                savePlaylists();
-                                renderPlaylists();
-                                alert('Playlists imported successfully!');
-                            } else {
-                                alert('Invalid file format');
-                            }
-                        } catch (err) {
-                            alert('Error parsing file');
+    document.getElementById("importPlaylistsBtn").onclick = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const imported = JSON.parse(ev.target.result);
+                        if (Array.isArray(imported)) {
+                            customPlaylists = imported;
+                            saveAllUserData();
+                            renderPlaylists();
+                            alert('Playlists imported successfully!');
+                        } else {
+                            alert('Invalid file format');
                         }
-                    };
-                    reader.readAsText(file);
-                }
-            };
-            input.click();
+                    } catch (err) {
+                        alert('Error parsing file');
+                    }
+                };
+                reader.readAsText(file);
+            }
         };
-    }
-}
-
-function exportPlaylists() {
-    const dataStr = JSON.stringify(customPlaylists, null, 2);
-    const blob = new Blob([dataStr], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `kroko_playlists_${new Date().toISOString().slice(0,19)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+        input.click();
+    };
 }
 
 function closeCreatePlaylistModal() {
-    const modal = document.getElementById("createPlaylistModal");
-    if (modal) modal.classList.remove("show");
+    document.getElementById("createPlaylistModal").classList.remove("show");
 }
 
 function closeEditPlaylistModal() {
-    const modal = document.getElementById("editPlaylistModal");
-    if (modal) modal.classList.remove("show");
+    document.getElementById("editPlaylistModal").classList.remove("show");
     currentEditingPlaylist = null;
 }
 
 function closeViewPlaylistModal() {
-    const modal = document.getElementById("playlistViewModal");
-    if (modal) modal.classList.remove("show");
+    document.getElementById("playlistViewModal").classList.remove("show");
     currentViewingPlaylist = null;
 }
 
@@ -991,7 +1065,7 @@ function setupDragAndDrop() {
                     cover: ""
                 };
                 songsList.push(newSong);
-                localStorage.setItem('kroko_songs', JSON.stringify(songsList));
+                saveAllUserData();
                 renderSongs(songsList, "songGrid");
                 alert(`Added: ${newSong.title}`);
             }
@@ -1003,21 +1077,16 @@ function setupHotkeys() {
     document.addEventListener('keydown', (e) => {
         if (e.code === 'Space') {
             e.preventDefault();
-            const playBtn = document.getElementById("play");
-            if (playBtn) playBtn.click();
+            document.getElementById("play")?.click();
         } else if (e.code === 'ArrowLeft') {
             e.preventDefault();
-            const prevBtn = document.getElementById("prev");
-            if (prevBtn) prevBtn.click();
+            document.getElementById("prev")?.click();
         } else if (e.code === 'ArrowRight') {
             e.preventDefault();
-            const nextBtn = document.getElementById("next");
-            if (nextBtn) nextBtn.click();
+            document.getElementById("next")?.click();
         }
     });
 }
-
-// ========== ДОПОМІЖНІ ФУНКЦІЇ ==========
 
 function formatTime(seconds) {
     if (isNaN(seconds)) return "0:00";
@@ -1036,5 +1105,5 @@ function escapeHtml(str) {
     });
 }
 
-// Запуск додатку
-initApp();
+// Запуск
+initAuth(); 
